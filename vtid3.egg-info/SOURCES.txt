@@ -1,0 +1,9 @@
+setup.py
+vtid3/__init__.py
+vtid3/cli.py
+vtid3.egg-info/PKG-INFO
+vtid3.egg-info/SOURCES.txt
+vtid3.egg-info/dependency_links.txt
+vtid3.egg-info/entry_points.txt
+vtid3.egg-info/requires.txt
+vtid3.egg-info/top_level.txt

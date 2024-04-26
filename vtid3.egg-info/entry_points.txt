@@ -1,0 +1,2 @@
+[console_scripts]
+vtid3 = vtid3.cli:cli
