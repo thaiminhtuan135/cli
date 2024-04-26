@@ -7,7 +7,7 @@ from os.path import expanduser, realpath
 
 @click.command()
 def hello():
-    print("Tuan dep trai")
+    print("Tuan dep hihi do ngoc")
 
 
 @click.command()
@@ -15,7 +15,6 @@ def configure():
     file_path = 'C:\\Users\\ADMIN\\Desktop\\cli\\hihi.txt'
 
     try:
-        # Mở tệp văn bản trong chế độ đọc
         with open(file_path, 'r') as file:
             content = file.read()
             print(content)
