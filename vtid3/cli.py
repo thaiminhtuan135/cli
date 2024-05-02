@@ -52,10 +52,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class {controller_name} {{
+public class {controller_name}Controller {{
 
     @GetMapping("/")
     public String index() {{
+        return "Hello from controller!";
+    }}
+    
+    @PostMapping("")
+    public void post() {{
         return "Hello from controller!";
     }}
 }}
@@ -63,8 +68,9 @@ public class {controller_name} {{
 
     projectPath = os.path.join(expanduser('~'), 'Desktop', 'cli_java_test')
 
-    file_path = os.path.join(projectPath, controller_name+".java")
-
+    file_path = os.path.join(projectPath, controller_name+"Controller.java")
+    current_directory = os.getcwd()
+    click.echo(current_directory)
     try:
         with open(file_path, "w") as file:
             file.write(controller_code)
