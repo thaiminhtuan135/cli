@@ -1,47 +1,29 @@
 import socket
 import os
-
+import pyautogui
+import imaplib
+import email
+import email
+from email.header import decode_header
 import click
 from os.path import expanduser, realpath
 
 
-@click.command()
-def hello():
-    print("Tuan dep hihi do ngoc")
+@click.group()
+def cli():
+    pass
 
 
-@click.command()
-def configure():
-    file_path = 'C:\\Users\\ADMIN\\Desktop\\cli\\hihi.txt'
-
-    try:
-        with open(file_path, 'r') as file:
-            content = file.read()
-            print(content)
-    except FileNotFoundError:
-        print(f"File '{file_path}' not found.")
-
-
-@click.command()
-@click.argument('ip_address')
-@click.option('-F', '--fast', is_flag=True, help="Fast scan (scan only common ports)")
-def scan(ip_address, fast):
-    print("Scanning " + ip_address)
-    if fast:
-        common_ports = [21, 22, 23, 25, 53, 80, 443, 3306]
-    else:
-        # Nếu không được chọn, quét tất cả các cổng (cổng từ 1 đến 65535)
-        common_ports = range(1, 65536)
-
-    for port in common_ports:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # sock.settimeout(1)
-        result = sock.connect_ex((ip_address, port))
-        if result == 0:
-            print(f"Port {port}: Open")
-        else:
-            print(f"Port {port}: Closed")
-        sock.close()
+# @click.command()
+# def configure():
+#     file_path = 'C:\\Users\\ADMIN\\Desktop\\cli\\hihi.txt'
+#
+#     try:
+#         with open(file_path, 'r') as file:
+#             content = file.read()
+#             print(content)
+#     except FileNotFoundError:
+#         print(f"File '{file_path}' not found.")
 
 
 @click.command()
@@ -66,25 +48,129 @@ public class {controller_name}Controller {{
 }}
 """
 
-    projectPath = os.path.join(expanduser('~'), 'Desktop', 'cli_java_test')
+    controller_directory_name = 'Controller'
+    if not os.path.exists(controller_directory_name):
+        os.makedirs(controller_directory_name)
 
-    file_path = os.path.join(projectPath, controller_name+"Controller.java")
-    current_directory = os.getcwd()
-    click.echo(current_directory)
+    controller_path = os.path.join(os.getcwd(), controller_directory_name)
+
+    current_directory = os.path.join(controller_path, controller_name + "Controller.java")
+
+    # click.echo(current_directory)
     try:
-        with open(file_path, "w") as file:
+        with open(current_directory, "w") as file:
             file.write(controller_code)
-        click.echo(f"Controller service '{file_path}' created successfully.")
+        click.echo(f"Controller service '{current_directory}' created successfully.")
     except Exception as e:
         click.echo(f"An error occurred: {e}")
 
 
-@click.group()
-def cli():
-    pass
+@click.command()
+@click.option('--hello', help='Print a greeting message.', required=True)
+@click.option('--document-name', help='Name of the document.')
+@click.option('--document-version', help='Version of the document.')
+def devops(hello, document_name, document_version):
+    click.echo(f'Hello {hello}!')
+    if document_name:
+        click.echo(f'Hello {document_name}!')
+    if document_version:
+        click.echo(f'Hello {document_version}!')
 
 
-cli.add_command(hello)
-cli.add_command(configure)
-cli.add_command(scan)
+@click.command()
+@click.option('--make-controller', help='Name of controller.')
+def dev(make_controller):
+    controller_code = f"""
+    import org.springframework.web.bind.annotation.GetMapping;
+    import org.springframework.web.bind.annotation.RestController;
+
+    @RestController
+    public class {make_controller}Controller {{
+
+        @GetMapping("/")
+        public String index() {{
+            return "Get!";
+        }}
+
+        @PostMapping("")
+        public void post() {{
+            return "Post!";
+        }}
+    }}
+    """
+
+    controller_path = os.path.join(os.getcwd(), "Controller")
+
+    if not os.path.exists(controller_path):
+        os.makedirs(controller_path)
+
+    current_directory = os.path.join(controller_path, make_controller + "Controller.java")
+
+    # click.echo(current_directory)
+    try:
+        with open(current_directory, "w") as file:
+            file.write(controller_code)
+        click.echo(f"Controller service '{current_directory}' created successfully.")
+    except Exception as e:
+        click.echo(f"An error occurred: {e}")
+
+
+@click.command()
+def whizlabs():
+    # 1226 471
+    pyautogui.press('win')
+    pyautogui.sleep(0.5)
+    pyautogui.write('chrome')
+    pyautogui.press('enter')
+    pyautogui.sleep(0.5)
+    pyautogui.click(1226, 471)
+
+    pyautogui.sleep(0.5)
+    pyautogui.write('whizlabs.com')
+    pyautogui.press('enter')
+
+
+def decode_subject(subject):
+    decoded_subject = ""
+    for part, encoding in decode_header(subject):
+        if encoding:
+            decoded_subject += part.decode(encoding)
+        else:
+            decoded_subject += part
+    return decoded_subject
+
+
+@click.command()
+def readmail():
+    # 1226 471
+
+    GMAIL_USERNAME = 'tuan.thaiminh@vti.com.vn'
+    GMAIL_PASSWORD = 'azin nwbg zcdt gqie'
+
+    imap_server = imaplib.IMAP4_SSL(host="imap.gmail.com")
+    imap_server.login(GMAIL_USERNAME, GMAIL_PASSWORD)
+    imap_server.select()
+    # Tìm kiếm email chưa đọc
+    # result, data = imap_server.search(None, "(UNSEEN)")
+    result, data = imap_server.search(None, "(SEEN)")
+    # Lấy 10 email đầu tiên
+    email_ids = data[0].split()[-10:]
+    # email_ids = data[0].split()
+    emails = []
+    print(email_ids)
+    # Find all emails in inbox
+    for email_id in email_ids:
+        result, data = imap_server.fetch(email_id, "(RFC822)")
+        raw_email = data[0][1]
+        msg = email.message_from_bytes(raw_email)
+        subject = msg["subject"]
+        print(decode_subject(subject))
+
+
+
+
 cli.add_command(controller)
+cli.add_command(devops)
+cli.add_command(whizlabs)
+cli.add_command(dev)
+cli.add_command(readmail)
