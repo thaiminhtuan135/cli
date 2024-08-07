@@ -1,0 +1,5 @@
+id : Long
+name: String
+address: String
+apartmentNumber: Integer
+bod: Date

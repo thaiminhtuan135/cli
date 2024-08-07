@@ -4,11 +4,31 @@ import json
 import click
 from os.path import expanduser, realpath
 
+fieldMappings = {
+    'Long': 'Long',
+    'Integer': 'Integer',
+    'String': 'String',
+    'Date': 'Date'
+}
+
+
+def readFile(file_path):
+    fieldDict = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            key, value = line.split(':')
+            fieldDict[key.strip()] = value.strip()
+    return fieldDict
+
+
+filePath = 'C:\\Users\\ADMIN\\Desktop\\cli\\entity.txt'
+fieldList = readFile(filePath)
+
 
 @click.command()
 def configure():
-    file_path = 'C:\\Users\\ADMIN\\Desktop\\cli\\hihi.txt'
-
+    file_path = 'C:\\Users\\ADMIN\\Desktop\\cli\\entity.txt'
+    print(fieldList)
     try:
         # Mở tệp văn bản trong chế độ đọc
         with open(file_path, 'r') as file:
@@ -40,7 +60,7 @@ def scan(ip_address, fast):
         sock.close()
 
 
-def generateControllerCode(controller_name, package):
+def generateControllerCode(entity, package):
     return f"""
 package {package};
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,7 +70,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 
 @RestController
-public class {controller_name}Controller {{
+public class {entity}Controller {{
 
     @GetMapping("/")
     public String index() {{
@@ -58,7 +78,7 @@ public class {controller_name}Controller {{
     }}
 
     @PostMapping("/create")
-    public ResponseEntity<?> post() {{
+    public ResponseEntity<?> post({entity}SaveRequest request) {{
         return new ResponseEntity<>("create", HttpStatus.OK);
     }}
 
@@ -102,15 +122,18 @@ public class {entity}SearchRequest implements Serializable {{
 
 
 def generateSaveRequestCode(entity, package):
+    fieldDefinitions = []
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+    fields_code = '\n'.join(fieldDefinitions)
     return f"""
 package {package};
 import java.io.Serializable;
 
 public class {entity}SaveRequest implements Serializable {{
-    private Long id;
-    private Integer integer;
-    private String string;
-    private Date date;
+{fields_code}
 }}
 """
 
@@ -215,7 +238,6 @@ def controller(entity):
     #     print("chuanmen")
     # else:
     #     print("hoho")
-
 
     # ensure_directory(pathServiceImpl)
     # file path
