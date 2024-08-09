@@ -8,6 +8,27 @@ from email.header import decode_header
 import click
 from os.path import expanduser, realpath
 
+# config
+fieldMappings = {
+    'Long': 'Long',
+    'Integer': 'Integer',
+    'String': 'String',
+    'Date': 'Date'
+}
+
+
+def readFile(file_path):
+    fieldDict = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            key, value = line.split(':')
+            fieldDict[key.strip()] = value.strip()
+    return fieldDict
+
+
+filePath = 'C:\\Users\\tuan.thaiminh\\Desktop\\cli\\entity.txt'
+fieldList = readFile(filePath)
+
 
 # 👻👽💩🎃🤖🤖🎃😈👉
 @click.group()
@@ -368,11 +389,14 @@ public class {controller_name}Controller {{
 """
 
 
-def generateRepositoryCode(entity, package):
+def generateRepositoryCode(entity, package, importEntity):
+    impPathEntity = convertPathToPackage(importEntity)
+
     return f"""
 package {package};
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.JpaRepository;
+import {impPathEntity}.{entity}Entity;
 public interface {entity}Repository extends JpaRepository<{entity}Entity, Long>,
     JpaSpecificationExecutor<{entity}Entity> {{
     
@@ -398,17 +422,34 @@ public interface {entity}Service {{
 """
 
 
-def generateServiceImplementCode(entity, package, importPathRepo, importPathSerivce, importPathDTO):
+def generateServiceImplementCode(entity, package, importPathRepo, importPathSerivce, importPathDTO, importPathRequest, importEntity):
     entityLower = entity[0].lower() + entity[1:]
     repo = entityLower + "Repository"
     impPathRepository = convertPathToPackage(importPathRepo)
     impPathService = convertPathToPackage(importPathSerivce)
+    impPathDTO = convertPathToPackage(importPathDTO)
+    impPathRequest = convertPathToPackage(importPathRequest)
+    impPathEntity = convertPathToPackage(importEntity)
+
+    # save
+    entityLower = entity[0].lower() + entity[1:]
+    entityInstance = entityLower
+
+    # Generate field assignments
+    fieldAssignments = []
+    for field in fieldList:
+        fieldAssignments.append(f'        {entityInstance}.set{field[0].upper() + field[1:]}(request.get{field[0].upper() + field[1:]}());')
+
+    fieldsCode = '\n'.join(fieldAssignments)
 
     return f"""
 package {package};    
 import {impPathRepository}.{entity}Repository;
 import {impPathService}.{entity}Service;
-import {importPathDTO}.{entity}DTO;
+import {impPathEntity}.{entity}Entity;
+import {impPathDTO}.{entity}DTO;
+import {impPathRequest}.{entity}SearchRequest;
+import {impPathRequest}.{entity}CreateRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -423,23 +464,24 @@ public class {entity}ServiceImpl implements {entity}Service {{
     }}
 
     @Override
-    public Student save(StudentCreateRequest request) {{
+    public Student save({entity}CreateRequest request) {{
         StudentEntity student = new StudentEntity();
         // TODO check duplicate
-//      {entity}Entity {entityLower}infor = {repo}.findById(request.getBranchId())
+//      {entity}Entity {entityLower}Infor = {repo}.findById(request.getBranchId())
 //          .orElseThrow(() -> new CustomCommonException(ErrorConstant.MSG002, ""));
         // TODO save
-        
-        return {repo}.save(student);
-    }}
-
-    @Override
-    public Optional<Student> getById(Long id) {{
+{fieldsCode}
+        {repo}.save(student);
         return null;
     }}
 
     @Override
-    public List<Student> getList() {{
+    public Optional<{entity}Entity> getById(Long id) {{
+        return null;
+    }}
+
+    @Override
+    public List<{entity}Entity> getList() {{
         return null;
     }}
 
@@ -451,16 +493,21 @@ public class {entity}ServiceImpl implements {entity}Service {{
 """
 
 
-def generateSaveRequestCode(entity, package):
+def generateCreateRequestCode(entity, package):
+    fieldDefinitions = []
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+    fields_code = '\n'.join(fieldDefinitions)
     return f"""
 package {package};
 import java.io.Serializable;
+import lombok.Data;
 
+@Data
 public class {entity}CreateRequest implements Serializable {{
-    private Long id;
-    private Integer integer;
-    private String string;
-    private Date date;
+{fields_code}
 }}
 """
 
@@ -537,6 +584,7 @@ def controller(entity):
     pathService = os.path.join('D:', config["service"])
     pathServiceImpl = os.path.join('D:', config["serviceImpl"])
     pathDTO = os.path.join('D:', config["dto"])
+    pathEntity = os.path.join('D:', config["entity"])
     #
     pathRequest = os.path.join('D:', config["request"], entity.lower())
     # pathResponse = os.path.join(expanduser('~'), config["response"])
@@ -564,13 +612,13 @@ def controller(entity):
 
     # 😘 CODE
     controllerCode = generateControllerCode(entity, convertPathToPackage(pathController))
-    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository))
+    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository),pathEntity)
     serviceCode = generateServiceCode(entity, convertPathToPackage(pathService))
     serviceImplCode = generateServiceImplementCode(entity, convertPathToPackage(pathServiceImpl), pathRepository,
-                                                   pathService, pathDTO)
+                                                   pathService, pathDTO, pathRequest,pathEntity)
 
     DTOCode = generateDTOCode(entity, convertPathToPackage(pathDTO))
-    createRequestCode = generateSaveRequestCode(entity, convertPathToPackage(pathRequest))
+    createRequestCode = generateCreateRequestCode(entity, convertPathToPackage(pathRequest))
     updateRequestCode = generateUpdateRequestCode(entity, convertPathToPackage(pathRequest))
     searchRequestCode = generateSearchRequestCode(entity, convertPathToPackage(pathRequest))
 
@@ -649,6 +697,7 @@ def config():
                 "request=",
                 "response=",
                 "dto=",
+                "entity=",
             ]
             with open(config_file_path, 'w') as config_file:
                 config_file.write("\n".join(default_config))
