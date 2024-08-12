@@ -26,8 +26,15 @@ def readFile(file_path):
     return fieldDict
 
 
-filePath = 'C:\\Users\\tuan.thaiminh\\Desktop\\cli\\entity.txt'
+# filePath = './entity.txt'
+project_path = os.path.expanduser('~/.myapp/entity')
+filePath = os.path.join(project_path, 'entity.txt')
 fieldList = readFile(filePath)
+
+
+@click.group()
+def create():
+    pass
 
 
 # 👻👽💩🎃🤖🤖🎃😈👉
@@ -422,7 +429,8 @@ public interface {entity}Service {{
 """
 
 
-def generateServiceImplementCode(entity, package, importPathRepo, importPathSerivce, importPathDTO, importPathRequest, importEntity):
+def generateServiceImplementCode(entity, package, importPathRepo, importPathSerivce, importPathDTO, importPathRequest,
+                                 importEntity):
     entityLower = entity[0].lower() + entity[1:]
     repo = entityLower + "Repository"
     impPathRepository = convertPathToPackage(importPathRepo)
@@ -438,7 +446,8 @@ def generateServiceImplementCode(entity, package, importPathRepo, importPathSeri
     # Generate field assignments
     fieldAssignments = []
     for field in fieldList:
-        fieldAssignments.append(f'        {entityInstance}.set{field[0].upper() + field[1:]}(request.get{field[0].upper() + field[1:]}());')
+        fieldAssignments.append(
+            f'        {entityInstance}.set{field[0].upper() + field[1:]}(request.get{field[0].upper() + field[1:]}());')
 
     fieldsCode = '\n'.join(fieldAssignments)
 
@@ -567,7 +576,7 @@ def checkDirectoryExist(path):
 @click.argument('entity', type=str)
 def controller(entity):
     config = {}
-    project_path = os.path.join('D:', 'tool_cli')
+    project_path = os.path.join('.', 'config')
     config_file_path = os.path.join(project_path, 'config.txt')
     try:
         with open(config_file_path, 'r') as config_file:
@@ -579,14 +588,14 @@ def controller(entity):
         click.echo(f"An error occurred while reading the config file: {e}")
 
     # 😘 path
-    pathController = os.path.join('D:', config["controller"])
-    pathRepository = os.path.join('D:', config["repository"])
-    pathService = os.path.join('D:', config["service"])
+    pathController = os.path.join('.', config["controller"])
+    pathRepository = os.path.join('.', config["repository"])
+    pathService = os.path.join('.', config["service"])
     pathServiceImpl = os.path.join('D:', config["serviceImpl"])
-    pathDTO = os.path.join('D:', config["dto"])
-    pathEntity = os.path.join('D:', config["entity"])
+    pathDTO = os.path.join('.', config["dto"])
+    pathEntity = os.path.join('.', config["entity"])
     #
-    pathRequest = os.path.join('D:', config["request"], entity.lower())
+    pathRequest = os.path.join('.', config["request"], entity.lower())
     # pathResponse = os.path.join(expanduser('~'), config["response"])
 
     # 😘 check folder exists
@@ -612,10 +621,10 @@ def controller(entity):
 
     # 😘 CODE
     controllerCode = generateControllerCode(entity, convertPathToPackage(pathController))
-    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository),pathEntity)
+    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository), pathEntity)
     serviceCode = generateServiceCode(entity, convertPathToPackage(pathService))
     serviceImplCode = generateServiceImplementCode(entity, convertPathToPackage(pathServiceImpl), pathRepository,
-                                                   pathService, pathDTO, pathRequest,pathEntity)
+                                                   pathService, pathDTO, pathRequest, pathEntity)
 
     DTOCode = generateDTOCode(entity, convertPathToPackage(pathDTO))
     createRequestCode = generateCreateRequestCode(entity, convertPathToPackage(pathRequest))
@@ -661,7 +670,7 @@ def controller(entity):
 
 @click.command()
 def config():
-    project_path = os.path.join('D:', 'tool_cli')
+    project_path = os.path.join('.', 'config')
     config_file_path = os.path.join(project_path, 'config.txt')
 
     if not os.path.exists(project_path):
@@ -712,6 +721,90 @@ def config():
         click.echo(f"An error occurred while opening the file: {e}")
 
 
+@click.command()
+def config():
+    project_path = os.path.join('.', 'config')
+    config_file_path = os.path.join(project_path, 'config.txt')
+
+    if not os.path.exists(project_path):
+        try:
+            os.makedirs(project_path)
+        except Exception as e:
+            click.echo(f"An error occurred while creating directory: {e}")
+            return
+    # if not os.path.exists(config_file_path):
+    #     try:
+    #         default_config = {
+    #             "controller": "",
+    #             "repository": "",
+    #             "service": "",
+    #             "serviceImpl": "",
+    #             "request": "",
+    #             "response": "",
+    #             "dto": "",
+    #         }
+    #         with open(config_file_path, 'w') as config_file:
+    #             json.dump(default_config, config_file, indent=4)
+    #         click.echo(f"Created '{config_file_path}' successfully.")
+    #     except Exception as e:
+    #         click.echo(f"An error occurred: {e}")
+    #         return
+    if not os.path.exists(config_file_path):
+        try:
+            default_config = [
+                "controller=",
+                "repository=",
+                "service=",
+                "serviceImpl=",
+                "request=",
+                "response=",
+                "dto=",
+                "entity=",
+            ]
+            with open(config_file_path, 'w') as config_file:
+                config_file.write("\n".join(default_config))
+            click.echo(f"Created '{config_file_path}' successfully.")
+        except Exception as e:
+            click.echo(f"An error occurred: {e}")
+            return
+
+    try:
+        os.system(f'start {config_file_path}')
+    except Exception as e:
+        click.echo(f"An error occurred while opening the file: {e}")
+
+
+@click.command()
+def entity():
+
+    project_path = os.path.expanduser('~/.myapp/entity')
+    config_file_path = os.path.join(project_path, 'entity.txt')
+
+    if not os.path.exists(project_path):
+        try:
+            os.makedirs(project_path)
+        except Exception as e:
+            click.echo(f"An error occurred while creating directory: {e}")
+            return
+
+    if not os.path.exists(config_file_path):
+        try:
+            default_config = ""
+            with open(config_file_path, 'w') as config_file:
+                config_file.write(default_config)
+            click.echo(f"Created '{config_file_path}' successfully.")
+        except Exception as e:
+            click.echo(f"An error occurred: {e}")
+            return
+
+    # Mở file entity.txt sau khi tạo
+    try:
+        os.system(f'start {config_file_path}')
+    except Exception as e:
+        click.echo(f"An error occurred while opening the file: {e}")
+
+
+create.add_command(entity)
 cli.add_command(controller)
 cli.add_command(devops)
 cli.add_command(whizlabs)
@@ -720,3 +813,5 @@ cli.add_command(readmail)
 cli.add_command(docker)
 cli.add_command(dockerbasic)
 cli.add_command(config)
+
+cli.add_command(create)

@@ -5,7 +5,8 @@ setup(
     version='0.0.0',
     packages=find_packages(),
     install_requires=[
-        'click'
+        'click',
+        'pyautogui',
     ],
     entry_points="""
     [console_scripts]
