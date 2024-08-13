@@ -504,13 +504,18 @@ public class {entity}ServiceImpl implements {entity}Service {{
 
 def generateCreateRequestCode(entity, package):
     fieldDefinitions = []
+    importDate = False
     for fieldName, fieldType in fieldList.items():
         java_type = fieldMappings.get(fieldType, 'String')
         fieldDefinitions.append(f'    private {java_type} {fieldName};')
+        if java_type == 'Date':
+            importDate = True
 
     fields_code = '\n'.join(fieldDefinitions)
+    date_import = 'import java.util.Date' if importDate else ''
     return f"""
 package {package};
+{date_import};
 import java.io.Serializable;
 import lombok.Data;
 
@@ -548,10 +553,7 @@ package {package};
 import java.io.Serializable;
 
 public class {entity}SearchRequest implements Serializable {{
-    private Long id;
-    private Integer integer;
-    private String string;
-    private Date date;
+    
 }}
 """
 
@@ -576,7 +578,7 @@ def checkDirectoryExist(path):
 @click.argument('entity', type=str)
 def controller(entity):
     config = {}
-    project_path = os.path.join('.', 'config')
+    project_path = os.path.expanduser('~/.myapp/config')
     config_file_path = os.path.join(project_path, 'config.txt')
     try:
         with open(config_file_path, 'r') as config_file:
@@ -670,7 +672,7 @@ def controller(entity):
 
 @click.command()
 def config():
-    project_path = os.path.join('.', 'config')
+    project_path = os.path.expanduser('~/.myapp/config')
     config_file_path = os.path.join(project_path, 'config.txt')
 
     if not os.path.exists(project_path):
@@ -679,23 +681,7 @@ def config():
         except Exception as e:
             click.echo(f"An error occurred while creating directory: {e}")
             return
-    # if not os.path.exists(config_file_path):
-    #     try:
-    #         default_config = {
-    #             "controller": "",
-    #             "repository": "",
-    #             "service": "",
-    #             "serviceImpl": "",
-    #             "request": "",
-    #             "response": "",
-    #             "dto": "",
-    #         }
-    #         with open(config_file_path, 'w') as config_file:
-    #             json.dump(default_config, config_file, indent=4)
-    #         click.echo(f"Created '{config_file_path}' successfully.")
-    #     except Exception as e:
-    #         click.echo(f"An error occurred: {e}")
-    #         return
+
     if not os.path.exists(config_file_path):
         try:
             default_config = [
@@ -721,57 +707,57 @@ def config():
         click.echo(f"An error occurred while opening the file: {e}")
 
 
-@click.command()
-def config():
-    project_path = os.path.join('.', 'config')
-    config_file_path = os.path.join(project_path, 'config.txt')
-
-    if not os.path.exists(project_path):
-        try:
-            os.makedirs(project_path)
-        except Exception as e:
-            click.echo(f"An error occurred while creating directory: {e}")
-            return
-    # if not os.path.exists(config_file_path):
-    #     try:
-    #         default_config = {
-    #             "controller": "",
-    #             "repository": "",
-    #             "service": "",
-    #             "serviceImpl": "",
-    #             "request": "",
-    #             "response": "",
-    #             "dto": "",
-    #         }
-    #         with open(config_file_path, 'w') as config_file:
-    #             json.dump(default_config, config_file, indent=4)
-    #         click.echo(f"Created '{config_file_path}' successfully.")
-    #     except Exception as e:
-    #         click.echo(f"An error occurred: {e}")
-    #         return
-    if not os.path.exists(config_file_path):
-        try:
-            default_config = [
-                "controller=",
-                "repository=",
-                "service=",
-                "serviceImpl=",
-                "request=",
-                "response=",
-                "dto=",
-                "entity=",
-            ]
-            with open(config_file_path, 'w') as config_file:
-                config_file.write("\n".join(default_config))
-            click.echo(f"Created '{config_file_path}' successfully.")
-        except Exception as e:
-            click.echo(f"An error occurred: {e}")
-            return
-
-    try:
-        os.system(f'start {config_file_path}')
-    except Exception as e:
-        click.echo(f"An error occurred while opening the file: {e}")
+# @click.command()
+# def config():
+#     project_path = os.path.join('.', 'config')
+#     config_file_path = os.path.join(project_path, 'config.txt')
+#
+#     if not os.path.exists(project_path):
+#         try:
+#             os.makedirs(project_path)
+#         except Exception as e:
+#             click.echo(f"An error occurred while creating directory: {e}")
+#             return
+#     # if not os.path.exists(config_file_path):
+#     #     try:
+#     #         default_config = {
+#     #             "controller": "",
+#     #             "repository": "",
+#     #             "service": "",
+#     #             "serviceImpl": "",
+#     #             "request": "",
+#     #             "response": "",
+#     #             "dto": "",
+#     #         }
+#     #         with open(config_file_path, 'w') as config_file:
+#     #             json.dump(default_config, config_file, indent=4)
+#     #         click.echo(f"Created '{config_file_path}' successfully.")
+#     #     except Exception as e:
+#     #         click.echo(f"An error occurred: {e}")
+#     #         return
+#     if not os.path.exists(config_file_path):
+#         try:
+#             default_config = [
+#                 "controller=",
+#                 "repository=",
+#                 "service=",
+#                 "serviceImpl=",
+#                 "request=",
+#                 "response=",
+#                 "dto=",
+#                 "entity=",
+#             ]
+#             with open(config_file_path, 'w') as config_file:
+#                 config_file.write("\n".join(default_config))
+#             click.echo(f"Created '{config_file_path}' successfully.")
+#         except Exception as e:
+#             click.echo(f"An error occurred: {e}")
+#             return
+#
+#     try:
+#         os.system(f'start {config_file_path}')
+#     except Exception as e:
+#         click.echo(f"An error occurred while opening the file: {e}")
 
 
 @click.command()
