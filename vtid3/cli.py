@@ -411,9 +411,16 @@ public interface {entity}Repository extends JpaRepository<{entity}Entity, Long>,
 """
 
 
-def generateServiceCode(entity, package):
+def generateServiceCode(entity, package, importPathRequest, importPathDTO):
+    impPathRequest = convertPathToPackage(importPathRequest)
+    impPathDTO = convertPathToPackage(importPathDTO)
+
     return f"""
 package {package};    
+import {impPathRequest}.{entity}SearchRequest;
+import {impPathRequest}.{entity}CreateRequest;
+import {impPathDTO}.{entity}DTO;
+import org.springframework.data.domain.Page;
 public interface {entity}Service {{
 
     Page<{entity}DTO> getList({entity}SearchRequest request);
@@ -548,11 +555,68 @@ public interface {entity}DTO {{
 
 
 def generateSearchRequestCode(entity, package):
+    fieldDefinitions = []
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+        if java_type == 'Date':
+            importDate = True
+
+    fields_code = '\n'.join(fieldDefinitions)
+    date_import = 'import java.util.Date' if importDate else ''
     return f"""
 package {package};
+{date_import};
 import java.io.Serializable;
 
 public class {entity}SearchRequest implements Serializable {{
+{fields_code}
+}}
+"""
+
+
+def generateCreateResponseCode(entity, package,importEntity):
+    impPathEntity = convertPathToPackage(importEntity)
+    fieldDefinitions = []
+    methodAssignments = []
+
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+
+        methodAssignments.append(
+            f'        response.set{fieldName[0].upper() + fieldName[1:]}(entity.get{fieldName[0].upper() + fieldName[1:]}());')
+        if java_type == 'Date':
+            importDate = True
+            # methodAssignments.append(
+            #     f'        response.set{fieldName.capitalize()}(entity.get{fieldName.capitalize()}At());')
+
+
+    fields_code = '\n'.join(fieldDefinitions)
+    assignments_code = '\n'.join(methodAssignments)
+    date_import = 'import java.util.Date' if importDate else ''
+
+    return f"""
+package {package};
+{date_import};
+import java.io.Serializable;
+import lombok.Data;
+import {impPathEntity}.{entity}Entity;
+
+@Data
+public class {entity}CreateResponse implements Serializable {{
+    private Long id;
+{fields_code}
+    
+    public static {entity}CreateResponse fromEntity({entity}Entity entity) {{
+        {entity}CreateResponse response = new {entity}CreateResponse();
+        response.setId(entity.getId());
+{assignments_code}
+        return response;
+    }}
     
 }}
 """
@@ -598,7 +662,7 @@ def controller(entity):
     pathEntity = os.path.join('.', config["entity"])
     #
     pathRequest = os.path.join('.', config["request"], entity.lower())
-    # pathResponse = os.path.join(expanduser('~'), config["response"])
+    pathResponse = os.path.join('.', config["response"], entity.lower())
 
     # 😘 check folder exists
     checkDirectoryExist(pathController)
@@ -607,7 +671,7 @@ def controller(entity):
     checkDirectoryExist(pathServiceImpl)
     checkDirectoryExist(pathDTO)
     checkDirectoryExist(pathRequest)
-    # ensure_directory(pathResponse)
+    checkDirectoryExist(pathResponse)
 
     # ensure_directory(pathServiceImpl)
     # 😘 file path
@@ -616,15 +680,19 @@ def controller(entity):
     filePathService = os.path.join(pathService, entity + "Service.java")
     filePathServiceImpl = os.path.join(pathServiceImpl, entity + "ServiceImpl.java")
     filePathDTO = os.path.join(pathDTO, entity + "DTO.java")
-    #
+    # request
     filePathCreateRequest = os.path.join(pathRequest, entity + "CreateRequest.java")
     filePathUpdateRequest = os.path.join(pathRequest, entity + "UpdateRequest.java")
     filePathSearchRequest = os.path.join(pathRequest, entity + "SearchRequest.java")
+    # response
+    filePathSearchResponse = os.path.join(pathResponse, entity + "SearchResponse.java")
+    filePathCreateResponse = os.path.join(pathResponse, entity + "CreateResponse.java")
+    filePathUpdateResponse = os.path.join(pathResponse, entity + "UpdateResponse.java")
 
     # 😘 CODE
     controllerCode = generateControllerCode(entity, convertPathToPackage(pathController))
     repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository), pathEntity)
-    serviceCode = generateServiceCode(entity, convertPathToPackage(pathService))
+    serviceCode = generateServiceCode(entity, convertPathToPackage(pathService), pathRequest, pathDTO)
     serviceImplCode = generateServiceImplementCode(entity, convertPathToPackage(pathServiceImpl), pathRepository,
                                                    pathService, pathDTO, pathRequest, pathEntity)
 
@@ -632,6 +700,8 @@ def controller(entity):
     createRequestCode = generateCreateRequestCode(entity, convertPathToPackage(pathRequest))
     updateRequestCode = generateUpdateRequestCode(entity, convertPathToPackage(pathRequest))
     searchRequestCode = generateSearchRequestCode(entity, convertPathToPackage(pathRequest))
+
+    createResponseCode = generateCreateResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
 
     try:
         # controller
@@ -666,6 +736,11 @@ def controller(entity):
         with open(filePathUpdateRequest, "w") as file:
             file.write(updateRequestCode)
             click.echo(f"Update request '{click.style(filePathUpdateRequest, fg='green')}' created successfully.")
+
+        # create response
+        with open(filePathCreateResponse, "w") as file:
+            file.write(createResponseCode)
+            click.echo(f"Create response '{click.style(filePathCreateResponse, fg='green')}' created successfully.")
     except Exception as e:
         click.echo(f"An error occurred: {e}")
 
@@ -762,7 +837,6 @@ def config():
 
 @click.command()
 def entity():
-
     project_path = os.path.expanduser('~/.myapp/entity')
     config_file_path = os.path.join(project_path, 'entity.txt')
 
