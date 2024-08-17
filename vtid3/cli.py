@@ -13,7 +13,8 @@ fieldMappings = {
     'Long': 'Long',
     'Integer': 'Integer',
     'String': 'String',
-    'Date': 'Date'
+    'Date': 'Date',
+    'Double': 'Double'
 }
 
 
@@ -355,7 +356,15 @@ def dockerbasic():
     print(commands)
 
 
-def generateControllerCode(controller_name, package):
+def lowerEntity(entity):
+    return entity[0].lower() + entity[1:]
+
+
+def generateControllerCode(entity, package, importPathRequest, importPathResponse, importPathService):
+    impPathRequest = convertPathToPackage(importPathRequest)
+    impPathResponse = convertPathToPackage(importPathResponse)
+    impPathService = convertPathToPackage(importPathService)
+    service = lowerEntity(entity) + "Service"
     id = '{id}'
     return f"""
 package {package};
@@ -363,81 +372,145 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import {impPathService}.{entity}Service;
+import {impPathRequest}.{entity}SearchRequest;
+import {impPathRequest}.{entity}CreateRequest;
+import {impPathRequest}.{entity}UpdateRequest;
+import {impPathResponse}.{entity}CreateResponse;
+import {impPathResponse}.{entity}UpdateResponse;
+import {impPathResponse}.{entity}SearchItemResponse;
 
 @RestController
-public class {controller_name}Controller {{
+@RequestMapping("/{lowerEntity(entity)}")
+public class {entity}Controller {{
+    @Autowired
+    private {entity}Service {service};
 
     @GetMapping("/")
     public String index() {{
         return "Hello from controller!";
     }}
 
-    @GetMapping("/'{id}'")
-    public ResponseEntity<?> getById() {{
-        return new ResponseEntity<>("detail", HttpStatus.OK);
+    @PostMapping("/list")
+    public SearchResponse<{entity}SearchItemResponse> searchList(
+            @RequestBody {entity}SearchRequest request) {{
+        return {service}.getSearchList(request);
+    }}
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getById(@PathVariable Long id) {{
+        return new ResponseEntity<>({service}.getById(id), HttpStatus.OK);
     }}
 
     @PostMapping("/create")
-    public ResponseEntity<?> post() {{
-        return new ResponseEntity<>("create", HttpStatus.OK);
+    public ResponseEntity<{entity}CreateResponse> post(@RequestBody {entity}CreateRequest request) {{
+        return new ResponseEntity<>({service}.save(request), HttpStatus.OK);
     }}
 
     @PutMapping("/update")
-    public ResponseEntity<?> put() {{
-        return new ResponseEntity<>("update", HttpStatus.OK);
+    public ResponseEntity<{entity}UpdateResponse> put(@RequestBody {entity}UpdateRequest request) {{
+        return new ResponseEntity<>({service}.update(request), HttpStatus.OK);
     }}
 
-    @DeleteMapping("")
-    public ResponseEntity<?> delete() {{
-        return new ResponseEntity<>("delete", HttpStatus.OK);
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> delete(@PathVariable Long id) {{
+        return {service}.delete(id);
     }}
 }}
 """
 
 
-def generateRepositoryCode(entity, package, importEntity):
+def generateRepositoryCode(entity, package, importEntity,importDTO):
     impPathEntity = convertPathToPackage(importEntity)
+    impPathDTO = convertPathToPackage(importDTO)
+
+    # Generate SELECT clause
+    select_clause = ", ".join([f"{entity.lower()}.{field} as {field}" for field in fieldList.keys()])
+    print(select_clause)
+    # Generate WHERE clause
+    where_clause = " AND ".join([
+        # Handle `String` fields
+        f"(:#{{#CONDITION.get{field.capitalize()}()}} IS NULL OR LOWER({entity.lower()}.{field}) LIKE LOWER(CONCAT('%', :#{{#CONDITION.get{field.capitalize()}()}}, '%')))"
+        if fieldList[field] == 'String'
+        # Handle `DATE` fields
+        else f"(:#{{#CONDITION.get{field.capitalize()}()}} IS NULL OR DATE({entity.lower()}.{field}) = DATE(:#{{#CONDITION.get{field.capitalize()}()}}))"
+        if fieldList[field] == 'Date'
+        # Handle other types (e.g., `Integer`)
+        else f"(:#{{#CONDITION.get{field.capitalize()}()}} IS NULL OR {entity.lower()}.{field} = :#{{#CONDITION.get{field.capitalize()}()}})"
+        for field in fieldList.keys()
+    ])
 
     return f"""
 package {package};
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import {impPathEntity}.{entity}Entity;
+import {impPathDTO}.SearchList{entity}DTO;
+import {impPathDTO}.SearchOption{entity}DTO;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 public interface {entity}Repository extends JpaRepository<{entity}Entity, Long>,
     JpaSpecificationExecutor<{entity}Entity> {{
     
+     @Query(value = "SELECT "
+            + "{select_clause} "
+            + "FROM {entity}Entity {lowerEntity(entity)} "
+            + "WHERE {where_clause} "
+            + "ORDER BY {lowerEntity(entity)}.createdAt DESC"
+    )
+    Page<SearchList{entity}DTO> searchList(@Param("CONDITION") SearchOption{entity}DTO options,
+                                          Pageable pageRequest);
 }}
 """
 
 
-def generateServiceCode(entity, package, importPathRequest, importPathDTO):
+def generateServiceCode(entity, package, importPathRequest, importPathResponse, importPathDTO, importPathEntity):
     impPathRequest = convertPathToPackage(importPathRequest)
+    impPathResponse = convertPathToPackage(importPathResponse)
     impPathDTO = convertPathToPackage(importPathDTO)
+    impPathEntity = convertPathToPackage(importPathEntity)
 
     return f"""
 package {package};    
 import {impPathRequest}.{entity}SearchRequest;
 import {impPathRequest}.{entity}CreateRequest;
-import {impPathDTO}.{entity}DTO;
+import {impPathRequest}.{entity}UpdateRequest;
+import {impPathResponse}.{entity}CreateResponse;
+import {impPathResponse}.{entity}UpdateResponse;
+import {impPathResponse}.{entity}DetailResponse;
+import {impPathResponse}.{entity}SearchItemResponse;
+import {impPathEntity}.{entity}Entity;
+import {impPathDTO}.SearchList{entity}DTO;
 import org.springframework.data.domain.Page;
+import java.util.Optional;
+import java.util.List;
+import org.springframework.http.ResponseEntity;
+
+
 public interface {entity}Service {{
 
-    Page<{entity}DTO> getList({entity}SearchRequest request);
+    SearchResponse<{entity}SearchItemResponse> getSearchList({entity}SearchRequest request);
     
-    {entity} save({entity}CreateRequest request);
+    {entity}CreateResponse save({entity}CreateRequest request);
 
-    Optional<{entity}> getById(Long id);
+    {entity}DetailResponse getById(Long id);
+    
+    {entity}UpdateResponse update({entity}UpdateRequest request);
 
-    List<{entity}> getList();
+    List<{entity}Entity> getList();
 
-    void delete(int id);
+    ResponseEntity<String> delete(Long id);
 }}
 """
 
 
 def generateServiceImplementCode(entity, package, importPathRepo, importPathSerivce, importPathDTO, importPathRequest,
-                                 importEntity):
+                                 importEntity, importResponse):
     entityLower = entity[0].lower() + entity[1:]
     repo = entityLower + "Repository"
     impPathRepository = convertPathToPackage(importPathRepo)
@@ -445,6 +518,7 @@ def generateServiceImplementCode(entity, package, importPathRepo, importPathSeri
     impPathDTO = convertPathToPackage(importPathDTO)
     impPathRequest = convertPathToPackage(importPathRequest)
     impPathEntity = convertPathToPackage(importEntity)
+    impPathResponse = convertPathToPackage(importResponse)
 
     # save
     entityLower = entity[0].lower() + entity[1:]
@@ -458,42 +532,88 @@ def generateServiceImplementCode(entity, package, importPathRepo, importPathSeri
 
     fieldsCode = '\n'.join(fieldAssignments)
 
-    return f"""
-package {package};    
+    searchOptionsAssignments = []
+    for field in fieldList:
+        searchOptionsAssignments.append(
+            f'              .{field[0].lower() + field[1:]}(request.get{field[0].upper() + field[1:]}())'
+        )
+
+    searchOptionsCode = '\n'.join(searchOptionsAssignments)
+
+    return f"""package {package};    
+    
 import {impPathRepository}.{entity}Repository;
 import {impPathService}.{entity}Service;
 import {impPathEntity}.{entity}Entity;
-import {impPathDTO}.{entity}DTO;
+import {impPathDTO}.SearchList{entity}DTO;
+import {impPathDTO}.SearchOption{entity}DTO;
 import {impPathRequest}.{entity}SearchRequest;
 import {impPathRequest}.{entity}CreateRequest;
+import {impPathRequest}.{entity}UpdateRequest;
+import {impPathResponse}.{entity}CreateResponse;
+import {impPathResponse}.{entity}UpdateResponse;
+import {impPathResponse}.{entity}DetailResponse;
+import {impPathResponse}.{entity}SearchItemResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.util.NoSuchElementException;
+import java.util.List;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
+import java.util.stream.Collectors;
 
 @Service
 public class {entity}ServiceImpl implements {entity}Service {{
     @Autowired
     private {entity}Repository {repo};
 
-   @Override
-    public Page<{entity}DTO> getList(StudentSearchRequest request) {{
-        return null;
+    @Override
+    public SearchResponse<{entity}SearchItemResponse> getSearchList({entity}SearchRequest request) {{
+         SearchOption{entity}DTO options = SearchOption{entity}DTO.builder()
+{searchOptionsCode}
+              .build();
+        Pageable pageRequest = request.getPageable();
+        Page<SearchList{entity}DTO> page = {repo}.searchList(options,
+            pageRequest);
+        PaginateResponse paginate =
+                PaginateResponse.builder().pageNumber(1 + page.getPageable().getPageNumber())
+                        .pageSize(page.getPageable().getPageSize())
+                        .totalElements(page.getTotalElements()).build();
+        
+        List<SearchList{entity}DTO> {lowerEntity(entity)}List = page.getContent();
+        List<{entity}SearchItemResponse> itemResponses ={lowerEntity(entity)}List.stream().map({entity}SearchItemResponse::fromEntity).collect(Collectors.toList()); 
+         
+        return SearchResponse.createEntityResponse(paginate, itemResponses);
+        
     }}
 
     @Override
-    public Student save({entity}CreateRequest request) {{
-        StudentEntity student = new StudentEntity();
+    public {entity}CreateResponse save({entity}CreateRequest request) {{
+        {entity}Entity student = new {entity}Entity();
         // TODO check duplicate
-//      {entity}Entity {entityLower}Infor = {repo}.findById(request.getBranchId())
+//      {entity}Entity {entityLower}Infor = {repo}.findById(request.getId())
 //          .orElseThrow(() -> new CustomCommonException(ErrorConstant.MSG002, ""));
         // TODO save
 {fieldsCode}
         {repo}.save(student);
-        return null;
+        return {entity}CreateResponse.fromEntity({entityLower});
     }}
 
     @Override
-    public Optional<{entity}Entity> getById(Long id) {{
-        return null;
+    public {entity}UpdateResponse update({entity}UpdateRequest request) {{
+        {entity}Entity {lowerEntity(entity)} = {repo}.findById(request.getId())
+                    .orElseThrow(() -> new NoSuchElementException("{entity} not found with ID: " + request.getId()));
+{fieldsCode}                    
+        return StudentUpdateResponse.fromEntity({lowerEntity(entity)});
+    }}
+
+    @Override
+    public {entity}DetailResponse getById(Long id) {{
+        {entity}Entity {lowerEntity(entity)} = {repo}.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("{entity} not found with ID: " + id));
+        return {entity}DetailResponse.fromEntity({lowerEntity(entity)});
     }}
 
     @Override
@@ -502,8 +622,11 @@ public class {entity}ServiceImpl implements {entity}Service {{
     }}
 
     @Override
-    public void delete(int id) {{
-
+    public ResponseEntity<String> delete(Long id) {{
+        {entity}Entity {lowerEntity(entity)} = {repo}.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("{entity} not found with ID: " + id));
+        {repo}.deleteById(id);
+        return new ResponseEntity<>("Delete successfully", HttpStatus.OK);
     }}
 }}
 """
@@ -537,19 +660,57 @@ def generateUpdateRequestCode(entity, package):
     return f"""
 package {package};
 import java.io.Serializable;
+import lombok.Data;
 
-public class {entity}UpdateRequest implements Serializable {{
+@Data
+public class {entity}UpdateRequest extends {entity}CreateRequest {{
     private Long id;
 }}
 """
 
 
-def generateDTOCode(entity, package):
+def generateSearchListDTOCode(entity, package):
+    fieldDefinitions = []
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    {java_type} get{fieldName[0].upper()+fieldName[1:]}();')
+        if java_type == 'Date':
+            importDate = True
+
+    fields_code = '\n'.join(fieldDefinitions)
+    date_import = 'import java.util.Date' if importDate else ''
     return f"""
 package {package};    
-public interface {entity}DTO {{
-    Long id();
-    String string();
+{date_import};
+public interface SearchList{entity}DTO {{
+    Long getId();
+{fields_code}
+}}
+"""
+
+
+def generateSearchOptionDTOCode(entity, package):
+    fieldDefinitions = []
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+        if java_type == 'Date':
+            importDate = True
+
+    fields_code = '\n'.join(fieldDefinitions)
+    date_import = 'import java.util.Date' if importDate else ''
+    return f"""
+package {package};    
+{date_import};
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class SearchOption{entity}DTO {{
+{fields_code}
 }}
 """
 
@@ -569,14 +730,16 @@ def generateSearchRequestCode(entity, package):
 package {package};
 {date_import};
 import java.io.Serializable;
+import lombok.Data;
 
-public class {entity}SearchRequest implements Serializable {{
+@Data
+public class {entity}SearchRequest extends PaginateRequest {{
 {fields_code}
 }}
 """
 
 
-def generateCreateResponseCode(entity, package,importEntity):
+def generateCreateResponseCode(entity, package, importEntity):
     impPathEntity = convertPathToPackage(importEntity)
     fieldDefinitions = []
     methodAssignments = []
@@ -586,14 +749,12 @@ def generateCreateResponseCode(entity, package,importEntity):
         java_type = fieldMappings.get(fieldType, 'String')
         fieldDefinitions.append(f'    private {java_type} {fieldName};')
 
-
         methodAssignments.append(
             f'        response.set{fieldName[0].upper() + fieldName[1:]}(entity.get{fieldName[0].upper() + fieldName[1:]}());')
         if java_type == 'Date':
             importDate = True
             # methodAssignments.append(
             #     f'        response.set{fieldName.capitalize()}(entity.get{fieldName.capitalize()}At());')
-
 
     fields_code = '\n'.join(fieldDefinitions)
     assignments_code = '\n'.join(methodAssignments)
@@ -618,6 +779,140 @@ public class {entity}CreateResponse implements Serializable {{
         return response;
     }}
     
+}}
+"""
+
+
+def generateUpdateResponseCode(entity, package, importEntity):
+    impPathEntity = convertPathToPackage(importEntity)
+    fieldDefinitions = []
+    methodAssignments = []
+
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+        methodAssignments.append(
+            f'        response.set{fieldName[0].upper() + fieldName[1:]}(entity.get{fieldName[0].upper() + fieldName[1:]}());')
+        if java_type == 'Date':
+            importDate = True
+            # methodAssignments.append(
+            #     f'        response.set{fieldName.capitalize()}(entity.get{fieldName.capitalize()}At());')
+
+    fields_code = '\n'.join(fieldDefinitions)
+    assignments_code = '\n'.join(methodAssignments)
+    date_import = 'import java.util.Date' if importDate else ''
+
+    return f"""
+package {package};
+{date_import};
+import java.io.Serializable;
+import lombok.Data;
+import {impPathEntity}.{entity}Entity;
+
+@Data
+public class {entity}UpdateResponse implements Serializable {{
+    private Long id;
+{fields_code}
+
+    public static {entity}UpdateResponse fromEntity({entity}Entity entity) {{
+        {entity}UpdateResponse response = new {entity}UpdateResponse();
+        response.setId(entity.getId());
+{assignments_code}
+        return response;
+    }}
+
+}}
+"""
+
+
+def generateDetailResponseCode(entity, package, importEntity):
+    impPathEntity = convertPathToPackage(importEntity)
+    fieldDefinitions = []
+    methodAssignments = []
+
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+        methodAssignments.append(
+            f'        response.set{fieldName[0].upper() + fieldName[1:]}(entity.get{fieldName[0].upper() + fieldName[1:]}());')
+        if java_type == 'Date':
+            importDate = True
+            # methodAssignments.append(
+            #     f'        response.set{fieldName.capitalize()}(entity.get{fieldName.capitalize()}At());')
+
+    fields_code = '\n'.join(fieldDefinitions)
+    assignments_code = '\n'.join(methodAssignments)
+    date_import = 'import java.util.Date' if importDate else ''
+
+    return f"""
+package {package};
+{date_import};
+import java.io.Serializable;
+import lombok.Data;
+import {impPathEntity}.{entity}Entity;
+
+@Data
+public class {entity}DetailResponse implements Serializable {{
+    private Long id;
+{fields_code}
+
+    public static {entity}DetailResponse fromEntity({entity}Entity entity) {{
+        {entity}DetailResponse response = new {entity}DetailResponse();
+        response.setId(entity.getId());
+{assignments_code}
+        return response;
+    }}
+
+}}
+"""
+
+
+def generateSearchItemResponseCode(entity, package, importEntity,importDTO ):
+    impPathEntity = convertPathToPackage(importEntity)
+    impPathDTO = convertPathToPackage(importDTO)
+    fieldDefinitions = []
+    methodAssignments = []
+
+    importDate = False
+    for fieldName, fieldType in fieldList.items():
+        java_type = fieldMappings.get(fieldType, 'String')
+        fieldDefinitions.append(f'    private {java_type} {fieldName};')
+
+        methodAssignments.append(
+            f'        response.set{fieldName[0].upper() + fieldName[1:]}(entity.get{fieldName[0].upper() + fieldName[1:]}());')
+        if java_type == 'Date':
+            importDate = True
+            # methodAssignments.append(
+            #     f'        response.set{fieldName.capitalize()}(entity.get{fieldName.capitalize()}At());')
+
+    fields_code = '\n'.join(fieldDefinitions)
+    assignments_code = '\n'.join(methodAssignments)
+    date_import = 'import java.util.Date' if importDate else ''
+
+    return f"""
+package {package};
+{date_import};
+import java.io.Serializable;
+import lombok.Data;
+import {impPathEntity}.{entity}Entity;
+import {impPathDTO}.SearchList{entity}DTO;
+
+@Data
+public class {entity}SearchItemResponse implements Serializable {{
+    private Long id;
+{fields_code}
+
+    public static {entity}SearchItemResponse fromEntity(SearchList{entity}DTO entity) {{
+        {entity}SearchItemResponse response = new {entity}SearchItemResponse();
+        response.setId(entity.getId());
+{assignments_code}
+        return response;
+    }}
+
 }}
 """
 
@@ -657,7 +952,7 @@ def controller(entity):
     pathController = os.path.join('.', config["controller"])
     pathRepository = os.path.join('.', config["repository"])
     pathService = os.path.join('.', config["service"])
-    pathServiceImpl = os.path.join('D:', config["serviceImpl"])
+    pathServiceImpl = os.path.join('.', config["serviceImpl"])
     pathDTO = os.path.join('.', config["dto"])
     pathEntity = os.path.join('.', config["entity"])
     #
@@ -679,29 +974,37 @@ def controller(entity):
     filePathRepository = os.path.join(pathRepository, entity + "Repository.java")
     filePathService = os.path.join(pathService, entity + "Service.java")
     filePathServiceImpl = os.path.join(pathServiceImpl, entity + "ServiceImpl.java")
-    filePathDTO = os.path.join(pathDTO, entity + "DTO.java")
+    filePathSearchListDTO = os.path.join(pathDTO, "SearchList"+entity + "DTO.java")
+    filePathSearchOptionDTO = os.path.join(pathDTO, "SearchOption" + entity + "DTO.java")
     # request
     filePathCreateRequest = os.path.join(pathRequest, entity + "CreateRequest.java")
     filePathUpdateRequest = os.path.join(pathRequest, entity + "UpdateRequest.java")
     filePathSearchRequest = os.path.join(pathRequest, entity + "SearchRequest.java")
     # response
-    filePathSearchResponse = os.path.join(pathResponse, entity + "SearchResponse.java")
+    filePathSearchItemResponse = os.path.join(pathResponse, entity + "SearchItemResponse.java")
     filePathCreateResponse = os.path.join(pathResponse, entity + "CreateResponse.java")
     filePathUpdateResponse = os.path.join(pathResponse, entity + "UpdateResponse.java")
+    filePathDetailResponse = os.path.join(pathResponse, entity + "DetailResponse.java")
 
     # 😘 CODE
-    controllerCode = generateControllerCode(entity, convertPathToPackage(pathController))
-    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository), pathEntity)
-    serviceCode = generateServiceCode(entity, convertPathToPackage(pathService), pathRequest, pathDTO)
+    controllerCode = generateControllerCode(entity, convertPathToPackage(pathController), pathRequest, pathResponse,
+                                            pathService)
+    repositoryCode = generateRepositoryCode(entity, convertPathToPackage(pathRepository), pathEntity, pathDTO)
+    serviceCode = generateServiceCode(entity, convertPathToPackage(pathService), pathRequest, pathResponse, pathDTO,
+                                      pathEntity)
     serviceImplCode = generateServiceImplementCode(entity, convertPathToPackage(pathServiceImpl), pathRepository,
-                                                   pathService, pathDTO, pathRequest, pathEntity)
+                                                   pathService, pathDTO, pathRequest, pathEntity, pathResponse)
 
-    DTOCode = generateDTOCode(entity, convertPathToPackage(pathDTO))
+    searchListDTOCode = generateSearchListDTOCode(entity, convertPathToPackage(pathDTO))
+    searchOptionDTOCode = generateSearchOptionDTOCode(entity, convertPathToPackage(pathDTO))
     createRequestCode = generateCreateRequestCode(entity, convertPathToPackage(pathRequest))
     updateRequestCode = generateUpdateRequestCode(entity, convertPathToPackage(pathRequest))
     searchRequestCode = generateSearchRequestCode(entity, convertPathToPackage(pathRequest))
 
+    searchItemResponseCode = generateSearchItemResponseCode(entity, convertPathToPackage(pathResponse), pathEntity,pathDTO)
     createResponseCode = generateCreateResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
+    updateResponseCode = generateUpdateResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
+    detailResponseCode = generateDetailResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
 
     try:
         # controller
@@ -721,9 +1024,13 @@ def controller(entity):
             file.write(serviceImplCode)
             click.echo(f"ServiceImpl '{click.style(filePathServiceImpl, fg='green')}' created successfully.")
         # DTO
-        with open(filePathDTO, "w") as file:
-            file.write(DTOCode)
-            click.echo(f"DTO '{click.style(filePathDTO, fg='green')}' created successfully.")
+        with open(filePathSearchListDTO, "w") as file:
+            file.write(searchListDTOCode)
+            click.echo(f"Search list DTO '{click.style(filePathSearchListDTO, fg='green')}' created successfully.")
+        # SearchOptionDTO
+        with open(filePathSearchOptionDTO, "w") as file:
+            file.write(searchOptionDTOCode)
+            click.echo(f"Search option DTO '{click.style(filePathSearchOptionDTO, fg='green')}' created successfully.")
         # update request
         with open(filePathSearchRequest, "w") as file:
             file.write(searchRequestCode)
@@ -736,11 +1043,24 @@ def controller(entity):
         with open(filePathUpdateRequest, "w") as file:
             file.write(updateRequestCode)
             click.echo(f"Update request '{click.style(filePathUpdateRequest, fg='green')}' created successfully.")
-
         # create response
         with open(filePathCreateResponse, "w") as file:
             file.write(createResponseCode)
             click.echo(f"Create response '{click.style(filePathCreateResponse, fg='green')}' created successfully.")
+        # update response
+        with open(filePathUpdateResponse, "w") as file:
+            file.write(updateResponseCode)
+            click.echo(f"Update response '{click.style(filePathUpdateResponse, fg='green')}' created successfully.")
+        # detail response
+        with open(filePathDetailResponse, "w") as file:
+            file.write(detailResponseCode)
+            click.echo(f"Detail response '{click.style(filePathDetailResponse, fg='green')}' created successfully.")
+        # detail response
+        with open(filePathSearchItemResponse, "w") as file:
+            file.write(searchItemResponseCode)
+            click.echo(
+                f"Search item response '{click.style(filePathSearchItemResponse, fg='green')}' created successfully.")
+
     except Exception as e:
         click.echo(f"An error occurred: {e}")
 
@@ -865,6 +1185,7 @@ def entity():
 
 
 create.add_command(entity)
+
 cli.add_command(controller)
 cli.add_command(devops)
 cli.add_command(whizlabs)
