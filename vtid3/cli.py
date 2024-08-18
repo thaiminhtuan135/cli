@@ -7,7 +7,7 @@ import email
 from email.header import decode_header
 import click
 
-from .generateCode import lala
+
 from os.path import expanduser, realpath
 
 # config
