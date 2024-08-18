@@ -6,6 +6,8 @@ import email
 import email
 from email.header import decode_header
 import click
+
+from .generateCode import lala
 from os.path import expanduser, realpath
 
 # config
@@ -422,7 +424,7 @@ public class {entity}Controller {{
 """
 
 
-def generateRepositoryCode(entity, package, importEntity,importDTO):
+def generateRepositoryCode(entity, package, importEntity, importDTO):
     impPathEntity = convertPathToPackage(importEntity)
     impPathDTO = convertPathToPackage(importDTO)
 
@@ -674,7 +676,7 @@ def generateSearchListDTOCode(entity, package):
     importDate = False
     for fieldName, fieldType in fieldList.items():
         java_type = fieldMappings.get(fieldType, 'String')
-        fieldDefinitions.append(f'    {java_type} get{fieldName[0].upper()+fieldName[1:]}();')
+        fieldDefinitions.append(f'    {java_type} get{fieldName[0].upper() + fieldName[1:]}();')
         if java_type == 'Date':
             importDate = True
 
@@ -871,7 +873,7 @@ public class {entity}DetailResponse implements Serializable {{
 """
 
 
-def generateSearchItemResponseCode(entity, package, importEntity,importDTO ):
+def generateSearchItemResponseCode(entity, package, importEntity, importDTO):
     impPathEntity = convertPathToPackage(importEntity)
     impPathDTO = convertPathToPackage(importDTO)
     fieldDefinitions = []
@@ -935,7 +937,9 @@ def checkDirectoryExist(path):
 
 @click.command()
 @click.argument('entity', type=str)
-def controller(entity):
+@click.option('-s', '--status', is_flag=True, help="Add changeStatus method")
+@click.option('-t', '--type', is_flag=True, help="Add changeType method")
+def controller(entity, status, type):
     config = {}
     project_path = os.path.expanduser('~/.myapp/config')
     config_file_path = os.path.join(project_path, 'config.txt')
@@ -974,7 +978,7 @@ def controller(entity):
     filePathRepository = os.path.join(pathRepository, entity + "Repository.java")
     filePathService = os.path.join(pathService, entity + "Service.java")
     filePathServiceImpl = os.path.join(pathServiceImpl, entity + "ServiceImpl.java")
-    filePathSearchListDTO = os.path.join(pathDTO, "SearchList"+entity + "DTO.java")
+    filePathSearchListDTO = os.path.join(pathDTO, "SearchList" + entity + "DTO.java")
     filePathSearchOptionDTO = os.path.join(pathDTO, "SearchOption" + entity + "DTO.java")
     # request
     filePathCreateRequest = os.path.join(pathRequest, entity + "CreateRequest.java")
@@ -1001,7 +1005,8 @@ def controller(entity):
     updateRequestCode = generateUpdateRequestCode(entity, convertPathToPackage(pathRequest))
     searchRequestCode = generateSearchRequestCode(entity, convertPathToPackage(pathRequest))
 
-    searchItemResponseCode = generateSearchItemResponseCode(entity, convertPathToPackage(pathResponse), pathEntity,pathDTO)
+    searchItemResponseCode = generateSearchItemResponseCode(entity, convertPathToPackage(pathResponse), pathEntity,
+                                                            pathDTO)
     createResponseCode = generateCreateResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
     updateResponseCode = generateUpdateResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
     detailResponseCode = generateDetailResponseCode(entity, convertPathToPackage(pathResponse), pathEntity)
@@ -1184,6 +1189,104 @@ def entity():
         click.echo(f"An error occurred while opening the file: {e}")
 
 
+def findFileInDirectory(directory, filename):
+    for root, dirs, files in os.walk(directory):
+        if filename in files:
+            return os.path.join(root, filename)
+    return None
+
+
+def addChangeStatusMethod(file_path):
+    # Đọc nội dung file hiện tại
+    try:
+        with open(file_path, 'r') as file:
+            content = file.read()
+
+        # Phương thức changeStatus cần thêm v
+        changeStatusMethod = """
+    @PutMapping("/changeStatus/{id}")
+    public ResponseEntity<?> changeStatus(@PathVariable Long id, @RequestBody String status) {
+        
+        boolean success = studentService.changeStatus(id, status);
+        if (success) {
+            return new ResponseEntity<>(HttpStatus.OK);
+        } else {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+"""
+
+        lastMethodPos = content.rfind('}')
+        if lastMethodPos != -1:
+            new_content = content[:lastMethodPos] + changeStatusMethod + content[lastMethodPos:]
+            print(new_content)
+
+            # with open(file_path, 'w') as file:
+            # print(file)
+            # file.write(new_content)
+            click.echo(f"Added changeStatus method to '{file_path}'.")
+        else:
+            click.echo("Could not find the end of the class definition to insert the method.")
+
+
+    except Exception as e:
+        click.echo(f"An error occurred while adding changeStatus method: {e}")
+
+
+@click.command()
+@click.option('-s', '--status', is_flag=True, help="Add changeStatus method")
+@click.option('-t', '--type', is_flag=True, help="Add changeType method")
+@click.option('-c', '--controller', type=str, help="Specify the controller file name")
+def feature(status, type, controller):
+    config = {}
+    projectPath = os.path.expanduser('~/.myapp/config')
+    configfilePath = os.path.join(projectPath, 'config.txt')
+    try:
+        with open(configfilePath, 'r') as configFile:
+            for line in configFile:
+                if line.strip() and "=" in line:
+                    key, value = line.strip().split('=', 1)
+                    config[key] = value.strip()
+    except Exception as e:
+        click.echo(f"An error occurred while reading the config file: {e}")
+
+    # 😘 path
+    pathController = os.path.join('.', config["controller"])
+    pathRepository = os.path.join('.', config["repository"])
+    pathService = os.path.join('.', config["service"])
+    pathServiceImpl = os.path.join('.', config["serviceImpl"])
+    pathDTO = os.path.join('.', config["dto"])
+    pathEntity = os.path.join('.', config["entity"])
+    #
+    pathRequest = os.path.join('.', config["request"])
+    pathResponse = os.path.join('.', config["response"])
+    print(pathController)
+
+    filePath = findFileInDirectory(pathController, controller)
+
+    if filePath:
+        click.echo(f"File found: {filePath}")
+
+        if status:
+            addChangeStatusMethod(filePath)
+
+        # if type:
+        #     add_change_type_method(file_path)
+
+    if filePath:
+        print(f"File found: {filePath}")
+    else:
+        print("File not found.")
+
+    # Kiểm tra flag `status`
+    if status:
+        click.echo("Status flag is set")
+
+    # Kiểm tra flag `type`
+    if type:
+        click.echo("Type flag is set")
+
+
 create.add_command(entity)
 
 cli.add_command(controller)
@@ -1196,3 +1299,4 @@ cli.add_command(dockerbasic)
 cli.add_command(config)
 
 cli.add_command(create)
+cli.add_command(feature)
