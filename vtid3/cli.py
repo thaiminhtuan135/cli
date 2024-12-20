@@ -31,9 +31,18 @@ def readFile(file_path):
 
 # filePath = './entity.txt'
 project_path = os.path.expanduser('~/.myapp/entity')
-filePath = os.path.join(project_path, 'entity.txt')
-fieldList = readFile(filePath)
+# os.makedirs(project_path, exist_ok=True)
 
+filePath = os.path.join(project_path, 'entity.txt')
+# fieldList = readFile(filePath)
+if os.path.exists(filePath):
+    try:
+        fieldList = readFile(filePath)
+        print("File contents:", fieldList)
+    except Exception as e:
+        print(f"Error reading file: {e}")
+else:
+    print(f"File '{filePath}' does not exist. You can create it or handle this case.")
 
 @click.group()
 def create():

@@ -1,0 +1,8 @@
+controller=src\main\java\com\ldcc\salesystem\controller
+repository=src\main\java\com\ldcc\salesystem\dao
+service=src\main\java\com\ldcc\salesystem\service
+serviceImpl=src\main\java\com\ldcc\salesystem\service\impl
+request=src\main\java\com\ldcc\salesystem\request
+response=src\main\java\com\ldcc\salesystem\response
+dto=src\main\java\com\ldcc\salesystem\dto
+entity=src\main\java\com\ldcc\salesystem\model
